@@ -1,6 +1,6 @@
-# Building AI-powered search in PostgreSQL using Amazon SageMaker and pgvector
+# Guidance for E-commerce Products Similarity Search on AWS
 
-This repository guides users through creating a product similarity search using Amazon SageMaker and Amazon RDS for PostgreSQL using the extension `pgvector`.
+This repository guides users through creating a product similarity search using Amazon SageMaker and Amazon RDS for PostgreSQL using the open source extension `pgvector`.
 
 # How does it work?
 
