@@ -1,0 +1,727 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: >
+    This template deploys a VPC and a Amazon SageMaker Notebook Instance
+
+Parameters:
+  VpcName:
+    Default: RDSPGVectorSageMakerWorkshop
+    Type: String
+
+  VpcCIDR:
+    Default: 10.215.0.0/16
+    Type: String
+
+  Subnet1CIDR:
+    Default: 10.215.10.0/24
+    Type: String
+
+  Subnet2CIDR:
+    Default: 10.215.20.0/24
+    Type: String
+
+  Subnet3CIDR:
+    Default: 10.215.30.0/24
+    Type: String
+
+  Subnet4CIDR:
+    Default: 10.215.40.0/24
+    Type: String
+
+  DefaultCodeRepository:
+    Default: https://github.com/aws-samples/rds-postgresql-pgvector.git
+    Type: String
+
+  DBEngineVersion:
+    Type: String
+    Default: 16.2
+    AllowedValues:
+      - 16.2
+      - 16.1
+      - 15.6
+  DBName:
+    Type: String
+    Default: demodb
+
+  C9InstanceType:
+    AllowedValues:
+      - t2.micro
+      - t3.micro
+      - t3.small
+      - t3.medium
+    Default: t3.medium
+    Description: Amazon Cloud9 instance type
+    Type: String
+
+  LambdaFunctionName:
+    AllowedPattern: ^[0-9a-zA-Z-]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$
+    Default: LambdaPostgreSQL
+    Type: String
+
+Resources:
+
+# VPC ----------------------------------------------------------
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      Tags:
+        - Key: Name
+          Value: !Ref VpcName
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Ref VpcName
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  Subnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      MapPublicIpOnLaunch: true
+      CidrBlock: !Ref Subnet1CIDR
+      Tags:
+        - Key: Name
+          Value: !Sub ${VpcName} (Public)
+
+  Subnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs ]
+      MapPublicIpOnLaunch: true
+      CidrBlock: !Ref Subnet2CIDR
+      Tags:
+        - Key: Name
+          Value: !Sub ${VpcName} (Public)
+
+  Subnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      MapPublicIpOnLaunch: false
+      CidrBlock: !Ref Subnet3CIDR
+      Tags:
+        - Key: Name
+          Value: !Sub ${VpcName} (Private)
+
+  Subnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs ]
+      MapPublicIpOnLaunch: false
+      CidrBlock: !Ref Subnet4CIDR
+      Tags:
+        - Key: Name
+          Value: !Sub ${VpcName} (Private)
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Ref VpcName
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  Subnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref Subnet1
+
+  Subnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref Subnet2
+
+  natEip:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+
+  vpcNgw:
+    Type: AWS::EC2::NatGateway
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      AllocationId: !GetAtt natEip.AllocationId
+      SubnetId: !Ref Subnet1
+
+  rteToNgw:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTablePvt
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref vpcNgw
+
+  RouteTablePvt:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Ref VpcName
+
+  Subnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTablePvt
+      SubnetId: !Ref Subnet3
+
+  Subnet4RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTablePvt
+      SubnetId: !Ref Subnet4
+
+  NetworkAclPublic:
+    Type: 'AWS::EC2::NetworkAcl'
+    Properties:
+      VpcId: !Ref VPC
+
+  NetworkAclEntryInPublicAllowVPC:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPublic
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: false
+      CidrBlock: '0.0.0.0/0'
+
+  NetworkAclEntryOutPublicAllowVPC:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPublic
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: true
+      CidrBlock: '0.0.0.0/0'
+
+  SubnetNetworkAclAssociation1Public:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref Subnet1
+      NetworkAclId: !Ref NetworkAclPublic
+
+  SubnetNetworkAclAssociation2Public:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref Subnet2
+      NetworkAclId: !Ref NetworkAclPublic
+
+  NetworkAclPrivate:
+    Type: 'AWS::EC2::NetworkAcl'
+    Properties:
+      VpcId: !Ref VPC
+
+  SubnetNetworkAclAssociation3Private:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref Subnet3
+      NetworkAclId: !Ref NetworkAclPrivate
+      
+  SubnetNetworkAclAssociation4Private:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref Subnet4
+      NetworkAclId: !Ref NetworkAclPrivate
+
+  NetworkAclEntryInPrivateAllowVPC:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPrivate
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: false
+      CidrBlock: '0.0.0.0/0'
+      
+  NetworkAclEntryOutPrivateAllowVPC:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPrivate
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: true
+      CidrBlock: '0.0.0.0/0'
+
+
+
+
+# END VPC ------------------------------------------------------
+
+# SageMaker -----------------------------------------------------
+  
+  ExecutionRole: 
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - sagemaker.amazonaws.com
+                - ssm.amazonaws.com
+                - translate.amazonaws.com
+                - ec2.amazonaws.com
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AdministratorAccess
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSageMakerFullAccess
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/TranslateFullAccess
+      Policies:
+        - 
+          PolicyName: "s3_access"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - 
+                Effect: "Allow"
+                Action: 
+                  - "s3:PutBucketPolicy"
+                  - "s3:DeleteBucket"
+                Resource: "arn:aws:s3:::sagemaker-*"                
+
+  SageMakerExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: "sagemaker.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSageMakerFullAccess
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+
+  HuggingFaceModel:
+    Type: "AWS::SageMaker::Model"
+    Properties:
+      ExecutionRoleArn: !GetAtt SageMakerExecutionRole.Arn
+      PrimaryContainer:
+        Image: !Sub "763104351884.dkr.ecr.${AWS::Region}.amazonaws.com/huggingface-pytorch-inference:1.13.1-transformers4.26.0-cpu-py39-ubuntu20.04"
+        Mode: "SingleModel"
+        Environment:
+          HF_MODEL_ID: "sentence-transformers/all-MiniLM-L6-v2"
+          HF_TASK: "feature-extraction"
+
+  EndpointConfig:
+    Type: "AWS::SageMaker::EndpointConfig"
+    Properties:
+      ProductionVariants:
+        - VariantName: "AllTraffic"
+          ModelName: !GetAtt HuggingFaceModel.ModelName
+          InitialInstanceCount: 1
+          InstanceType: "ml.m5.large"
+
+  Endpoint:
+    Type: "AWS::SageMaker::Endpoint"
+    Properties:
+      EndpointConfigName: !GetAtt EndpointConfig.EndpointConfigName
+
+# END SageMaker -------------------------------------------------
+
+# RDS PostgreSQL -----------------------------------------------
+
+  EncryptionKey:
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Type: AWS::KMS::Key
+    Properties:
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: !Ref AWS::StackName
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS:
+                - !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: "kms:*"
+            Resource: "*"
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+
+  EncryptionKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${AWS::StackName}"
+      TargetKeyId: !Ref EncryptionKey
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: "RDS DB Subnet Group"
+      SubnetIds: [!Ref Subnet3, !Ref Subnet4 ]
+
+  RDSSecrets:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: "rdspg-vector-secret"
+      Description: 'This is the secret for RDS instance'
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "postgres" }'
+        GenerateStringKey: 'password'
+        PasswordLength: 16
+        ExcludeCharacters: '"@/\'
+
+  VPCSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: !Ref 'AWS::StackName'
+      SecurityGroupEgress:
+      - IpProtocol: -1
+        CidrIp: "0.0.0.0/0"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 5432
+        ToPort: 5432
+        CidrIp: !Ref VpcCIDR
+        Description: 'Access to AppServer Host Security Group'
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: !Sub '${AWS::StackName}-DBSecurityGroup'
+
+  DBInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      DBInstanceIdentifier: "rdspg-vector"
+      AllocatedStorage: "20"
+      DBInstanceClass: db.t3.micro
+      Engine: postgres
+      DBName: !Ref DBName
+      MasterUsername: !Join ['', ['{{resolve:secretsmanager:', !Ref RDSSecrets, ':SecretString:username}}' ]]
+      MasterUserPassword: !Join ['', ['{{resolve:secretsmanager:', !Ref RDSSecrets, ':SecretString:password}}' ]]
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups: 
+        - !Ref VPCSecurityGroup
+      AllowMajorVersionUpgrade: false
+      AutoMinorVersionUpgrade: true
+      EngineVersion: !Ref DBEngineVersion
+      KmsKeyId: !Ref EncryptionKey
+      MultiAZ: false
+      StorageType: gp3
+      StorageEncrypted: true
+      BackupRetentionPeriod: 0
+      DeletionProtection: true
+      PubliclyAccessible: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}"
+
+  SecretPostgreSQLAttachment:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId: !Ref RDSSecrets
+      TargetId: !Ref DBInstance
+      TargetType: AWS::RDS::DBInstance
+
+# end RDS PostgreSQL -----------------------------------------------
+
+# Lambda             -----------------------------------------------
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+        - "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess"
+      Description: IAM role to provide needed permission for Lambda function to execute and store logs in cloudwatch
+
+  LambdaLG:
+    Type: AWS::Logs::LogGroup
+    DependsOn: LambdaFunction
+    Properties: 
+      LogGroupName: !Sub '/aws/lambda/${LambdaFunctionName}'
+      RetentionInDays: 7
+
+  rSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Security group for Lambda which will execute the post database creation steps
+      GroupName: post_lambda_sg
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: '-1'
+      VpcId: !Ref VPC
+
+  LambdaFunction: 
+    Type: AWS::Lambda::Function
+    DependsOn: [ DBInstance, Endpoint ]
+    Properties:
+      FunctionName: !Ref 'LambdaFunctionName'
+      Description: Run SQL Scripts on RDS PostgreSQL Database using AWS Lambda function
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: python3.9
+      MemorySize: 2048
+      Timeout: 900
+      Environment: 
+        Variables:
+          DBUSER: !Sub '{{resolve:secretsmanager:${RDSSecrets}:SecretString:username}}'
+          DBPASSWD: !Sub '{{resolve:secretsmanager:${RDSSecrets}:SecretString:password}}'
+          DBNAME: !Ref DBName
+          ENDPOINT_NAME: !GetAtt 'Endpoint.EndpointName'
+          NTHREADS: 8
+      Code:
+        ZipFile: |
+          import cfnresponse
+          import psycopg2
+          import os
+          import json
+          import boto3
+          import requests
+          from multiprocessing import Process, Pipe
+
+          def download_metadata(url):
+            if not os.path.exists(filename):
+              urllib.request.urlretrieve(url, filename)
+
+          def get_embeddings(val, conn):
+            ENDPOINT_NAME = os.environ.get('ENDPOINT_NAME')
+            runtime= boto3.client('runtime.sagemaker')
+            results = []
+            for x in val:
+              payload = json.dumps({'inputs' : ' '.join(x.get('descriptions')) })
+              response = runtime.invoke_endpoint(EndpointName=ENDPOINT_NAME,
+                                                ContentType='application/json',
+                                                Body=payload)
+              r = json.loads(response['Body'].read().decode())
+              x['embeddings'] = [sublist[0] for sublist in r][0]
+              results.append(x)
+            conn.send(results)
+            conn.close()
+
+          def create_chunks(array, chunk_size):
+            chunks = []
+            for i in range(0, len(array), chunk_size):
+              if i + chunk_size < len(array):
+                chunks.append(array[i:i + chunk_size])
+              else:
+                chunks.append(array[i:])
+            return chunks
+
+          def lambda_handler(event, context):
+              print (event)
+              print (context)
+              print (os.environ.get('DBUSER'))
+              nthreads = int(os.environ.get('NTHREADS'))
+              responseData = {}
+
+              if event['RequestType'] == 'Delete':
+                responseData = {'Message': 'SUCCESSFUL'}
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, "CustomResourcePhysicalID")
+                return
+
+              try:
+
+                #url = "https://raw.githubusercontent.com/zalandoresearch/feidegger/master/data/FEIDEGGER_release_1.2.json"
+                url = "https://raw.githubusercontent.com/aws-samples/rds-postgresql-pgvector/main/data/FEIDEGGER_release_1.2.json"
+                r = requests.get(url)
+                data = json.loads(r.content)
+                data = data[:100]
+                nchunks = int(len(data) / nthreads)
+                inputs = create_chunks(data, nchunks)
+
+                """
+                Generate embedding for product descriptions for the catalog array 
+                Use multiprocessing
+                """
+
+                processes = []
+                parent_connections = []
+                for i1 in inputs:            
+                  parent_conn, child_conn = Pipe()
+                  parent_connections.append(parent_conn)
+                  process = Process(target=get_embeddings, args=(i1, child_conn,))
+                  processes.append(process)
+                for process in processes:
+                  process.start()
+                for process in processes:
+                  process.join()
+                dataset = []
+                for parent_connection in parent_connections:
+                  dr = parent_connection.recv()
+                  for x in dr:
+                    dataset.append(x)
+
+                """
+                Database Information 
+                """
+              
+                uname = os.environ.get('DBUSER')
+                userpwd = os.environ.get('DBPASSWD')
+                dbname = str.format(event['ResourceProperties']['dbname'])
+                port = str.format(event['ResourceProperties']['port'])
+                endpoint = str.format(event['ResourceProperties']['endpoint'])
+
+                       
+                """
+                Run sql commands to initialize Product catalog schema in RDS for PostgreSQL
+                """
+
+                with psycopg2.connect(user=uname, password=userpwd, database=dbname, port=port, host=endpoint, connect_timeout=60) as dbconn:
+                  with dbconn.cursor() as cursor:
+                    cursor.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+                    cursor.execute("CREATE SCHEMA IF NOT EXISTS demo;")
+                    cursor.execute("""CREATE TABLE IF NOT EXISTS demo.products(
+                                      id bigserial primary key,
+                                      description text,
+                                      url text,
+                                      split int,
+                                      embedding vector(384)
+                                );""")
+                    cursor.execute("CREATE INDEX ON demo.products USING hnsw (embedding vector_l2_ops) WITH (m = 4, ef_construction = 10);")
+                    cursor.execute("TRUNCATE TABLE demo.products")
+                    for x in dataset:
+                      cursor.execute("INSERT INTO demo.products (description, url, split, embedding) VALUES (%s, %s, %s, %s);", (' '.join(x.get('descriptions', [])), x.get('url'), x.get('split'), x.get('embeddings') ))
+                  dbconn.commit()
+                responseData = {'Message': 'SUCCESSFUL!!'}
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, "CustomResourcePhysicalID")
+
+              except Exception as e:
+                print('Exception: ' + str(e))
+                responseData = {'Message': 'FAILED!!'}
+                cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "CustomResourcePhysicalID")
+
+      Layers:
+        - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:psycopg2-layer:1"
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt rSG.GroupId
+        SubnetIds: [ !Ref Subnet3, !Ref Subnet4 ]
+
+  CustomResoure:
+    Type: AWS::CloudFormation::CustomResource
+    DependsOn: [ LambdaFunction, DBInstance, Endpoint ]
+    Properties:
+      ServiceToken: !GetAtt LambdaFunction.Arn
+      endpoint: !GetAtt DBInstance.Endpoint.Address  
+      uname: !Sub '{{resolve:secretsmanager:${RDSSecrets}:SecretString:username}}'
+      userpwd: !Sub '{{resolve:secretsmanager:${RDSSecrets}:SecretString:password}}'
+      dbname: !Ref DBName
+      port: 5432        
+
+  # Cloud9 Instance
+
+  C9Bootstrap:
+   Type: AWS::SSM::Document
+   Properties:
+     DocumentType: Command
+     Content:
+       schemaVersion: '2.2'
+       description: Bootstrap cloud9 for installing required libraries
+       parameters:
+        DBSECRET:
+          description: (Required) Provide the dbsecret
+          type: String
+          default: "rdspg-vector-secret"
+        ENDPOINTNAME:
+          description: (Required) Provide the sagemaker endpoint
+          type: String
+          default: !GetAtt 'Endpoint.EndpointName'
+       mainSteps:
+       - action: aws:runShellScript
+         name: BootstrapTools
+         inputs:
+           runCommand:
+           - "#!/bin/bash"
+           - date
+           - echo LANG=en_US.utf-8 >> /etc/environment
+           - echo LC_ALL=en_US.UTF-8 >> /etc/environment
+           - echo "export DBSECRET={{DBSECRET}}" >> /home/ec2-user/.bashrc
+           - echo "export ENDPOINTNAME={{ENDPOINTNAME}}" >> /home/ec2-user/.bashrc
+           - . /home/ec2-user/.bashrc
+           - yum -y update
+           - yum -y install git
+           - amazon-linux-extras install -y postgresql14
+           - git clone https://github.com/aws-samples/rds-postgresql-pgvector.git /home/ec2-user/rds-postgresql-pgvector
+           - chown -hR ec2-user:ec2-user /home/ec2-user/rds-postgresql-pgvector
+           - echo "Bootstrap completed with return code $?"
+
+  C9BootstrapAssociation:
+   Type: AWS::SSM::Association
+   Properties:
+     Name: !Ref C9Bootstrap
+     Targets:
+       - Key: tag:SSMBootstrap
+         Values:
+         - Active
+
+  C9InstanceProfile:
+   Type: AWS::IAM::InstanceProfile
+   Properties:
+     Path: "/"
+     Roles:
+     - !Ref ExecutionRole
+
+  C9Instance:
+    Type: AWS::Cloud9::EnvironmentEC2
+    Properties:
+      AutomaticStopTimeMinutes: 60
+      Description: AWS Cloud9 instance for DAT312 event
+      InstanceType: !Ref C9InstanceType
+      ImageId: amazonlinux-2-x86_64
+      SubnetId: !Ref Subnet1
+      Tags:
+        -
+          Key: SSMBootstrap
+          Value: Active
+
+Outputs:
+
+  DBEndpoint:
+    Description: 'RDS PostgreSQL Endpoint'
+    Value: !GetAtt 'DBInstance.Endpoint.Address'
+    Export:
+      Name:
+        'Fn::Sub': '${AWS::StackName}-DBEndPoint'
+
+  DBSecret:
+    Description: Database Secret'
+    Value: !Ref RDSSecrets
+    Export:
+      Name:
+        'Fn::Sub': '${AWS::StackName}-DBSecrets'
+
