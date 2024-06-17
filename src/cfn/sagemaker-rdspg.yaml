@@ -30,7 +30,7 @@ Parameters:
     Type: String
 
   DefaultCodeRepository:
-    Default: https://github.com/aws-samples/rds-postgresql-pgvector.git
+    Default: https://github.com/aws-solutions-library-samples/guidance-for-e-commerce-products-similarity-search-on-aws.git
     Type: String
 
   DBEngineVersion:
@@ -676,8 +676,8 @@ Resources:
            - yum -y update
            - yum -y install git
            - amazon-linux-extras install -y postgresql14
-           - git clone https://github.com/aws-samples/rds-postgresql-pgvector.git /home/ec2-user/rds-postgresql-pgvector
-           - chown -hR ec2-user:ec2-user /home/ec2-user/rds-postgresql-pgvector
+           - git clone https://github.com/aws-solutions-library-samples/guidance-for-e-commerce-products-similarity-search-on-aws.git /home/ec2-user/guidance-for-e-commerce-products-similarity-search-on-aws
+           - chown -hR ec2-user:ec2-user /home/ec2-user/guidance-for-e-commerce-products-similarity-search-on-aws
            - echo "Bootstrap completed with return code $?"
 
   C9BootstrapAssociation:
