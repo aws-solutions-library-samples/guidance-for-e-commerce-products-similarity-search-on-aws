@@ -33,8 +33,8 @@ To follow along with this tutorial, you should have the following prerequisites:
 2. Open AWS Cloudshell in target Region, and clone the git repository and publish Psycopg2 Lambda layer.
     
     ```
-    git clone https://github.com/aws-samples/rds-postgresql-pgvector.git
-    cd rds-postgresql-pgvector/src/scripts/
+    git clone https://github.com/aws-solutions-library-samples/guidance-for-e-commerce-products-similarity-search-on-aws.git
+    cd guidance-for-e-commerce-products-similarity-search-on-aws/src/scripts/
     bash ./publish_lambda_layer.sh
     ```
     The output would look like below:
@@ -49,7 +49,7 @@ To follow along with this tutorial, you should have the following prerequisites:
     ![output_cloud9IDE](static/output_step7.png)
 8. In Cloud9 IDE shell, run the following commands to start the application
     ```
-    cd rds-postgresql-pgvector
+    cd guidance-for-e-commerce-products-similarity-search-on-aws
     pip3 install -r src/scripts/requirements.txt
     streamlit run app.py --server.port=8080
     ```
