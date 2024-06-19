@@ -29,10 +29,6 @@ Parameters:
     Default: 10.215.40.0/24
     Type: String
 
-  DefaultCodeRepository:
-    Default: https://github.com/aws-solutions-library-samples/guidance-for-e-commerce-products-similarity-search-on-aws.git
-    Type: String
-
   DBEngineVersion:
     Type: String
     Default: 16.2
@@ -57,6 +53,14 @@ Parameters:
   LambdaFunctionName:
     AllowedPattern: ^[0-9a-zA-Z-]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$
     Default: LambdaPostgreSQL
+    Type: String
+
+  LambdaLayerName:
+    Default: "psycopg2-layer"
+    Type: String
+
+  LambdaLayerVersion:
+    Default: "1"
     Type: String
 
 Resources:
@@ -626,7 +630,7 @@ Resources:
                 cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "CustomResourcePhysicalID")
 
       Layers:
-        - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:psycopg2-layer:1"
+        - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:${LambdaLayerName}:${LambdaLayerVersion}"
       VpcConfig:
         SecurityGroupIds:
           - !GetAtt rSG.GroupId
