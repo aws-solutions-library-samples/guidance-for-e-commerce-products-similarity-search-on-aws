@@ -9,7 +9,6 @@ List the top-level sections of the README template, along with a hyperlink to th
 ### Required
 
 1. [Overview](#overview)
-    - [What is pgvector?](#what-is-pgvector)
     - [Architecture](#Architecture)
     - [Cost](#cost)
 2. [Prerequisites](#prerequisites)
@@ -17,23 +16,12 @@ List the top-level sections of the README template, along with a hyperlink to th
 3. [Deployment Steps](#deployment-steps)
 4. [Deployment Validation](#deployment-validation)
 5. [Running the Guidance](#running-the-guidance)
+6. [Next Steps](#next-steps)
 7. [Cleanup](#cleanup)
 
 ## Overview
 
-### What is `pgvector`?
-
-pgvector is an open-source extension designed to augment PostgreSQL databases with the capability to store and conduct searches on ML-generated embeddings to identify both exact and approximate nearest neighbors. It’s designed to work seamlessly with other PostgreSQL features, including indexing and querying. 
-
-To generate vector embeddings, you can use ML service such as [Amazon SageMaker](https://aws.amazon.com/sagemaker/) or [Amazon Bedrock](https://aws.amazon.com/bedrock/). Please see AWS [Decision Guide](https://aws.amazon.com/getting-started/decision-guides/machine-learning-on-aws-how-to-choose/) to pick the right AI and ML services, frameworks, and foundation models to support your work on AWS.
-
-By utilizing the pgvector extension, PostgreSQL can effectively perform similarity searches on extensive vector embeddings, providing businesses with a speedy and proficient solution. 
-
-Please review pgvector [documentation](https://github.com/pgvector/pgvector) for additional details.
-
-### How does it work?
-
-we have used pre-trained model [`all-MiniLM-L6-v2`](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) from Hugging Face SentenceTransformers to generate fixed 384 length sentence embedding from feidegger, a zalandoresearch dataset. Then those feature vectors are stored in [RDS for PostgreSQL](https://aws.amazon.com/rds/postgresql/) using extension `pgvector` for product similarity search.
+This guidance helps you build a product catalog similarity search solution for e-commerce using Amazon SageMaker and Amazon RDS for PostgreSQL with the pgvector extension. `pgvector` is an open-source extension designed to augment PostgreSQL databases with the capability to store and conduct searches on ML-generated embeddings to identify both exact and approximate nearest neighbors. It’s designed to work seamlessly with other PostgreSQL features, including indexing and querying. To generate vector embeddings, you can use ML service such as [Amazon SageMaker](https://aws.amazon.com/sagemaker/) or [Amazon Bedrock](https://aws.amazon.com/bedrock/). Please see AWS [Decision Guide](https://aws.amazon.com/getting-started/decision-guides/machine-learning-on-aws-how-to-choose/) to pick the right AI and ML services, frameworks, and foundation models to support your work on AWS. The solution involves generating vector embeddings for product descriptions using a pre-trained Hugging Face model deployed on SageMaker. These embeddings are then stored in an RDS for PostgreSQL database with the pgvector extension, enabling efficient similarity searches. By leveraging pgvector's indexing capabilities, we optimize search performance, providing accurate and fast product recommendations. This versatile approach can be applied across various industries, including retail, gaming, and life sciences, to enhance search functionality and user engagement through AI-powered solutions.
 
 ### Architecture
 
@@ -49,6 +37,7 @@ For cost management, we recommend creating a budget through AWS Cost Explorer. P
 
 The following table provides a sample cost breakdown for deploying this Guidance with the default parameters in the `us-east-2` Region for one month:
 
+
 | AWS service  | Dimensions | Cost [USD] |
 | ----------- | ------------ | ------------ |
 | Amazon RDS for PostgreSQL | 1 `db.t3.micro` Instances, 10GiB gp3 Storage | $ 15.44 USD per month |
@@ -56,10 +45,11 @@ The following table provides a sample cost breakdown for deploying this Guidance
 | Amazon EC2 | 1 t3.medium instance | $ 30.37 per month |
 | AWS CloudWatch Logs | 1GB/month of log data generated | $ 1.53 per month |
 | AWS Lambda | 1 million requests in each Region | $ 0.40 per month |
+| | | |
+|Total Estimated Cost | | $ 130.54 per month |
+| | | |
 
-Total estimated cost: $ 130.54 per month
-
-Note: We recommend creating a Budget through AWS Cost Explorer to help manage costs. Prices are subject to change. For full details, refer to the pricing webpage for each AWS service used in this Guidance.
+Note: We recommend creating a [Budget](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-managing-costs.html) through [AWS Cost Explorer](https://aws.amazon.com/aws-cost-management/aws-cost-explorer/) to help manage costs. Prices are subject to change. For full details, refer to the pricing webpage for each AWS service used in this Guidance.
 
 ## Prerequisites
 
@@ -113,6 +103,12 @@ Since the guidance runs in the AWS cloud, you should run it through Mac or Windo
     ![output_strealit1](static/output_step9.png)
 4. Test the application search product catalog using the preview brower.
     ![output_strealit2](static/output_step10.png)
+
+## Next Steps
+
+For more information, refer to the following:
+
+[Building AI-powered search in PostgreSQL using Amazon SageMaker and pgvector](https://aws.amazon.com/blogs/database/building-ai-powered-search-in-postgresql-using-amazon-sagemaker-and-pgvector/)
 
 ## Cleanup
 
