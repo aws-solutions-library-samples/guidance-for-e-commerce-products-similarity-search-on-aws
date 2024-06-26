@@ -2,7 +2,7 @@
 AWSTemplateFormatVersion: 2010-09-09
 
 Description: >
-    This template deploys a VPC and a Amazon SageMaker Notebook Instance
+    This template deploys a VPC and a Amazon SageMaker Notebook Instance - Guidance for E-commerce Products Similarity Search on AWS (SO9446)
 
 Parameters:
   VpcName:
